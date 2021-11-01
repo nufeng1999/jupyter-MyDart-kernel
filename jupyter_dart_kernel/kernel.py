@@ -16,7 +16,7 @@ class RealTimeSubprocess(subprocess.Popen):
 
     inputRequest = "<inputRequest>"
 
-    def __init__(self, cmd, write_to_stdout, write_to_stderr, read_from_stdin):
+    def __init__(self, cmd, write_to_stdout, write_to_stderr, read_from_stdin,cwd=None,shell=False):
         """
         :param cmd: the command to execute
         :param write_to_stdout: a callable that will be called with chunks of data from stdout
@@ -26,7 +26,7 @@ class RealTimeSubprocess(subprocess.Popen):
         self._write_to_stderr = write_to_stderr
         self._read_from_stdin = read_from_stdin
 
-        super().__init__(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=0)
+        super().__init__(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=0,cwd=cwd,shell=shell)
 
         self._stdout_queue = Queue()
         self._stdout_thread = Thread(target=RealTimeSubprocess._enqueue_output, args=(self.stdout, self._stdout_queue))
@@ -85,25 +85,25 @@ class RealTimeSubprocess(subprocess.Popen):
                 self._write_to_stdout(contents)
 
 
-class CKernel(Kernel):
-    implementation = 'jupyter_c_kernel'
+class DartKernel(Kernel):
+    implementation = 'jupyter_dart_kernel'
     implementation_version = '1.0'
-    language = 'c'
-    language_version = 'C11'
+    language = 'Dart'
+    language_version = '2.X.X'
     language_info = {'name': 'text/x-csrc',
                      'mimetype': 'text/x-csrc',
-                     'file_extension': '.c'}
-    banner = "C kernel.\n" \
-             "Uses gcc, compiles in C11, and creates source code files and executables in temporary folder.\n"
+                     'file_extension': '.dart'}
+    banner = "Dart kernel.\n" \
+             "Uses Dart, compiles in dart, and creates source code files and executables in temporary folder.\n"
 
-    main_head = "#include <stdio.h>\n" \
-            "#include <math.h>\n" \
-            "int main(){\n"
+    main_head = "\n" \
+            "\n" \
+            "int main(List<String> arguments){\n"
 
     main_foot = "\nreturn 0;\n}"
 
     def __init__(self, *args, **kwargs):
-        super(CKernel, self).__init__(*args, **kwargs)
+        super(DartKernel, self).__init__(*args, **kwargs)
         self._allow_stdin = True
         self.readOnlyFileSystem = False
         self.bufferedOutput = True
@@ -145,35 +145,42 @@ class CKernel(Kernel):
     def _read_from_stdin(self):
         return self.raw_input()
 
-    def create_jupyter_subprocess(self, cmd):
+    def create_jupyter_subprocess(self, cmd,cwd=None,shell=False):
         return RealTimeSubprocess(cmd,
                                   self._write_to_stdout,
                                   self._write_to_stderr,
-                                  self._read_from_stdin)
+                                  self._read_from_stdin,cwd,shell)
+    def generate_dartfile(self, source_filename, binary_filename, cflags=None, ldflags=None):
 
-    def compile_with_gcc(self, source_filename, binary_filename, cflags=None, ldflags=None):
+        return
+    def compile_with_dart2native(self, source_filename, binary_filename, cflags=None, ldflags=None):
         # cflags = ['-std=c89', '-pedantic', '-fPIC', '-shared', '-rdynamic'] + cflags
         # cflags = ['-std=c99', '-Wdeclaration-after-statement', '-Wvla', '-fPIC', '-shared', '-rdynamic'] + cflags
         # cflags = ['-std=iso9899:199409', '-pedantic', '-fPIC', '-shared', '-rdynamic'] + cflags
         # cflags = ['-std=c99', '-pedantic', '-fPIC', '-shared', '-rdynamic'] + cflags
-        cflags = ['-std=c11', '-pedantic', '-fPIC', '-shared', '-rdynamic'] + cflags
-        if self.linkMaths:
-            cflags = cflags + ['-lm']
-        if self.wError:
-            cflags = cflags + ['-Werror']
-        if self.wAll:
-            cflags = cflags + ['-Wall']
-        if self.readOnlyFileSystem:
-            cflags = ['-DREAD_ONLY_FILE_SYSTEM'] + cflags
-        if self.bufferedOutput:
-            cflags = ['-DBUFFERED_OUTPUT'] + cflags
-        args = ['gcc', source_filename] + cflags + ['-o', binary_filename] + ldflags
+        # cflags = ['-std=c11', '-pedantic', '-fPIC','-pie', '-rdynamic'] + cflags
+        outfile=None
+        #binary_filename='/root/mytestc.out'
+        # if self.linkMaths:
+        #     cflags = cflags + ['-lm']
+        # if self.wError:
+        #     cflags = cflags + ['-Werror']
+        # if self.wAll:
+        #     cflags = cflags + ['-Wall']
+        #if ('-o' not in cflags):
+            #binary_filename=cflags[cflags.index('-o')+1]
+        #else:
+        outfile= ['-o', binary_filename]
+        args = ['dart','compile', 'exe', source_filename] + cflags + outfile + ldflags
+        # for x in args: self._write_to_stderr(" " + x + " ")
         return self.create_jupyter_subprocess(args)
 
     def _filter_magics(self, code):
 
         magics = {'cflags': [],
                   'ldflags': [],
+                  'file': [],
+                  'norun': [],
                   'args': []}
 
         actualCode = ''
@@ -184,6 +191,12 @@ class CKernel(Kernel):
                 key = key.strip().lower()
 
                 if key in ['ldflags', 'cflags']:
+                    for flag in value.split():
+                        magics[key] += [flag]
+                elif key == "file":
+                    for flag in value.split():
+                        magics[key] += [flag]
+                elif key == "norun":
                     for flag in value.split():
                         magics[key] += [flag]
                 elif key == "args":
@@ -207,47 +220,64 @@ class CKernel(Kernel):
         tmpCode = re.sub(r"//.*", "", code)
         tmpCode = re.sub(r"/\*.*?\*/", "", tmpCode, flags=re.M|re.S)
 
-        x = re.search(r"int\s+main\s*\(", tmpCode)
+        x = re.search(r".*\s+main\s*\(", tmpCode)
 
         if not x:
             code = self.main_head + code + self.main_foot
-            magics['cflags'] += ['-lm']
+            magics['cflags'] += ['-v','error']
 
         return magics, code
 
     def do_execute(self, code, silent, store_history=True,
                    user_expressions=None, allow_stdin=True):
-
+        self.resDir
         magics, code = self._filter_magics(code)
-
-        magics, code = self._add_main(magics, code)
+        if len(magics['norun'])<1:
+            magics, code = self._add_main(magics, code)
 
         # replace stdio with wrapped version
-        headerDir = "\"" + self.resDir + "/stdio_wrap.h" + "\""
-        code = code.replace("<stdio.h>", headerDir)
-        code = code.replace("\"stdio.h\"", headerDir)
-
-        with self.new_temp_file(suffix='.c') as source_file:
+        # headerDir = "\"" + self.resDir + "/stdio_wrap.h" + "\""
+        # code = code.replace("<stdio.h>", headerDir)
+        # code = code.replace("\"stdio.h\"", headerDir)
+        
+        with self.new_temp_file(suffix='.dart',dir=os.path.abspath('')) as source_file:
             source_file.write(code)
             source_file.flush()
+            if len(magics['file'])>0:
+                jfile = magics['file'][0]
+                # for x in jfile: self._write_to_stderr("file " + x + " ")
+                os.rename(source_file.name,os.path.join(os.path.abspath(''),jfile))
+                source_file.name=os.path.join(os.path.abspath(''),jfile)
+            '''
             with self.new_temp_file(suffix='.out') as binary_file:
-                p = self.compile_with_gcc(source_file.name, binary_file.name, magics['cflags'], magics['ldflags'])
+                p = self.compile_with_dart2native(source_file.name, binary_file.name, magics['cflags'], magics['ldflags'])
                 while p.poll() is None:
                     p.write_contents()
                 p.write_contents()
+                
                 if p.returncode != 0:  # Compilation failed
                     self._write_to_stderr(
                             "[C kernel] GCC exited with code {}, the executable will not be executed".format(
                                     p.returncode))
 
                     # delete source files before exit
-                    os.remove(source_file.name)
-                    os.remove(binary_file.name)
+                    # os.remove(source_file.name)
+                    # os.remove(binary_file.name)
 
                     return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [],
                             'user_expressions': {}}
-
-        p = self.create_jupyter_subprocess([self.master_path, binary_file.name] + magics['args'])
+            '''
+        # for x in ['dart',source_file.name]+ magics['args']: 
+            # self._write_to_stdout(" " + x + " ")
+        if len(magics['norun'])>0:
+            if len(magics['file'])<1:
+                self._write_to_stderr("[Dart kernel] Warning: no file name parameter")
+            else:
+                self._write_to_stdout("[Dart kernel] Info:file created successfully")
+            return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
+        p = self.create_jupyter_subprocess(['dart',source_file.name]+ magics['args'],cwd=None,shell=False)
+        #p = self.create_jupyter_subprocess([binary_file.name]+ magics['args'],cwd=None,shell=False)
+        #p = self.create_jupyter_subprocess([self.master_path, binary_file.name] + magics['args'],cwd='/tmp',shell=True)
         while p.poll() is None:
             p.write_contents()
 
@@ -258,11 +288,11 @@ class CKernel(Kernel):
         p.write_contents()
 
         # now remove the files we have just created
-        os.remove(source_file.name)
-        os.remove(binary_file.name)
+        #os.remove(source_file.name)
+        #os.remove(binary_file.name)
 
         if p.returncode != 0:
-            self._write_to_stderr("[C kernel] Executable exited with code {}".format(p.returncode))
+            self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
         return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
 
     def do_shutdown(self, restart):
