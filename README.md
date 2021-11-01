@@ -12,7 +12,7 @@
 git clone https://github.com/nufeng1999/jupyter-dart-kernel.git
 cd jupyter-dart-kernel
 pip install -e .  # for system install: sudo install .
-cd jupyter_dart_kernel && install_dart_kernel --user # for sys install: sudo install_c_kernel
+cd jupyter_dart_kernel && install_dart_kernel --user # for sys install: sudo install_dart_kernel
 # now you can start the notebook
 jupyter notebook
 ```
