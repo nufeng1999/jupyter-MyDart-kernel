@@ -145,6 +145,31 @@ class DartKernel(Kernel):
     def _read_from_stdin(self):
         return self.raw_input()
 
+    def readcodefile(self,filename,spacecount=0):
+        filecode=''
+        codelist1=None
+        with open(os.path.join(os.path.abspath(''),filename), 'r') as codef1:
+            codelist1 = codef1.readlines()
+        if len(codelist1)>0:
+            for t in codelist1:
+                filecode+=' '*spacecount + t
+        return filecode
+    
+    def do_dart_command(self,commands=None,cwd=None):
+        p = self.create_jupyter_subprocess(['dart']+commands,cwd=os.path.abspath(''),shell=False)
+        while p.poll() is None:
+            p.write_contents()
+        # wait for threads to finish, so output is always shown
+        p._stdout_thread.join()
+        p._stderr_thread.join()
+
+        p.write_contents()
+
+        if p.returncode != 0:
+            self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
+        else:
+            self._write_to_stdout("[Dart kernel] Info:dart command success.")
+        return
     def create_jupyter_subprocess(self, cmd,cwd=None,shell=False):
         return RealTimeSubprocess(cmd,
                                   self._write_to_stdout,
@@ -181,13 +206,16 @@ class DartKernel(Kernel):
                   'ldflags': [],
                   'file': [],
                   'norun': [],
+                  'include': [],
+                  'command': [],
                   'args': []}
 
         actualCode = ''
 
         for line in code.splitlines():
-            if line.startswith('//%'):
-                key, value = line[3:].split(":", 2)
+            orgline=line
+            if line.strip().startswith('//%'):
+                key, value = line.strip()[3:].split(":", 2)
                 key = key.strip().lower()
 
                 if key in ['ldflags', 'cflags']:
@@ -196,9 +224,21 @@ class DartKernel(Kernel):
                 elif key == "file":
                     for flag in value.split():
                         magics[key] += [flag]
+                elif key == "include":
+                    for flag in value.split():
+                        magics[key] += [flag]
+                    if len(magics['include'])>0:
+                        index1=line.find('//%')
+                        line=self.readcodefile(magics['include'][0],index1)
+                        actualCode += line + '\n'
                 elif key == "norun":
                     for flag in value.split():
                         magics[key] += [flag]
+                elif key == "command":
+                    for flag in value.split():
+                        magics[key] += [flag]
+                    if len(magics['command'])>0:
+                        self.do_dart_command(magics['command'])
                 elif key == "args":
                     # Split arguments respecting quotes
                     for argument in re.findall(r'(?:[^\s,"]|"(?:\\.|[^"])*")+', value):
@@ -288,9 +328,9 @@ class DartKernel(Kernel):
         p.write_contents()
 
         # now remove the files we have just created
-        #os.remove(source_file.name)
+        # os.remove(source_file.name)
         #os.remove(binary_file.name)
-
+        self.cleanup_files()
         if p.returncode != 0:
             self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
         return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
