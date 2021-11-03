@@ -155,6 +155,29 @@ class DartKernel(Kernel):
                 filecode+=' '*spacecount + t
         return filecode
     
+    def do_shell_command(self,commands,cwd=None,shell=True):
+        # self._write_to_stdout(''.join((' '+ str(s) for s in commands)))
+        try:
+            p = RealTimeSubprocess(commands,
+                                  self._write_to_stdout,
+                                  self._write_to_stderr,
+                                  self._read_from_stdin,cwd,shell)
+            while p.poll() is None:
+                p.write_contents()
+            # wait for threads to finish, so output is always shown
+            p._stdout_thread.join()
+            p._stderr_thread.join()
+
+            p.write_contents()
+
+            if p.returncode != 0:
+                self._write_to_stderr("[Dart kernel] Error: Executable command exited with code {}\n".format(p.returncode))
+            else:
+                self._write_to_stdout("[Dart kernel] Info: command success.\n")
+            return
+        except Exception as e:
+            self._write_to_stderr("[Dart kernel] Error:Executable command error! "+str(e)+"\n")
+
     def do_dart_command(self,commands=None,cwd=None):
         p = self.create_jupyter_subprocess(['dart']+commands,cwd=os.path.abspath(''),shell=False)
         while p.poll() is None:
@@ -170,14 +193,17 @@ class DartKernel(Kernel):
         else:
             self._write_to_stdout("[Dart kernel] Info:dart command success.")
         return
+
     def create_jupyter_subprocess(self, cmd,cwd=None,shell=False):
         return RealTimeSubprocess(cmd,
                                   self._write_to_stdout,
                                   self._write_to_stderr,
                                   self._read_from_stdin,cwd,shell)
+
     def generate_dartfile(self, source_filename, binary_filename, cflags=None, ldflags=None):
 
         return
+
     def compile_with_dart2native(self, source_filename, binary_filename, cflags=None, ldflags=None):
         # cflags = ['-std=c89', '-pedantic', '-fPIC', '-shared', '-rdynamic'] + cflags
         # cflags = ['-std=c99', '-Wdeclaration-after-statement', '-Wvla', '-fPIC', '-shared', '-rdynamic'] + cflags
@@ -205,9 +231,11 @@ class DartKernel(Kernel):
         magics = {'cflags': [],
                   'ldflags': [],
                   'file': [],
-                  'norun': [],
+                  'norunnotecmd': [],
+                  'noruncode': [],
                   'include': [],
                   'command': [],
+                  'dartcmd': [],
                   'args': []}
 
         actualCode = ''
@@ -215,6 +243,12 @@ class DartKernel(Kernel):
         for line in code.splitlines():
             orgline=line
             if line.strip().startswith('//%'):
+                if line.strip()[3:] == "noruncode":
+                    magics['noruncode'] += ['true']
+                    continue
+                if line.strip()[3:] == "onlyrunnotecmd":
+                    magics['onlyrunnotecmd'] += ['true']
+                    continue
                 key, value = line.strip()[3:].split(":", 2)
                 key = key.strip().lower()
 
@@ -231,14 +265,15 @@ class DartKernel(Kernel):
                         index1=line.find('//%')
                         line=self.readcodefile(magics['include'][0],index1)
                         actualCode += line + '\n'
-                elif key == "norun":
-                    for flag in value.split():
-                        magics[key] += [flag]
                 elif key == "command":
+                    magics[key] = [value]
+                    if len(magics['command'])>0:
+                        self.do_shell_command(magics['command'])
+                elif key == "dartcmd":
                     for flag in value.split():
                         magics[key] += [flag]
-                    if len(magics['command'])>0:
-                        self.do_dart_command(magics['command'])
+                    if len(magics['dartcmd'])>0:
+                        self.do_dart_command(magics['dartcmd'])
                 elif key == "args":
                     # Split arguments respecting quotes
                     for argument in re.findall(r'(?:[^\s,"]|"(?:\\.|[^"])*")+', value):
@@ -270,52 +305,28 @@ class DartKernel(Kernel):
 
     def do_execute(self, code, silent, store_history=True,
                    user_expressions=None, allow_stdin=True):
-        self.resDir
+        
         magics, code = self._filter_magics(code)
-        if len(magics['norun'])<1:
+        if len(magics['noruncode'])>0 and ( len(magics['command'])>0 or len(magics['dartcmd'])>0):
+            return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
+        if len(magics['file'])<1:
             magics, code = self._add_main(magics, code)
-
-        # replace stdio with wrapped version
-        # headerDir = "\"" + self.resDir + "/stdio_wrap.h" + "\""
-        # code = code.replace("<stdio.h>", headerDir)
-        # code = code.replace("\"stdio.h\"", headerDir)
         
         with self.new_temp_file(suffix='.dart',dir=os.path.abspath('')) as source_file:
             source_file.write(code)
             source_file.flush()
+            newsrcfilename=source_file.name
+            
             if len(magics['file'])>0:
-                jfile = magics['file'][0]
+                newsrcfilename = magics['file'][0]
                 # for x in jfile: self._write_to_stderr("file " + x + " ")
-                os.rename(source_file.name,os.path.join(os.path.abspath(''),jfile))
-                source_file.name=os.path.join(os.path.abspath(''),jfile)
-            '''
-            with self.new_temp_file(suffix='.out') as binary_file:
-                p = self.compile_with_dart2native(source_file.name, binary_file.name, magics['cflags'], magics['ldflags'])
-                while p.poll() is None:
-                    p.write_contents()
-                p.write_contents()
-                
-                if p.returncode != 0:  # Compilation failed
-                    self._write_to_stderr(
-                            "[C kernel] GCC exited with code {}, the executable will not be executed".format(
-                                    p.returncode))
-
-                    # delete source files before exit
-                    # os.remove(source_file.name)
-                    # os.remove(binary_file.name)
-
-                    return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [],
-                            'user_expressions': {}}
-            '''
-        # for x in ['dart',source_file.name]+ magics['args']: 
-            # self._write_to_stdout(" " + x + " ")
-        if len(magics['norun'])>0:
-            if len(magics['file'])<1:
-                self._write_to_stderr("[Dart kernel] Warning: no file name parameter")
-            else:
-                self._write_to_stdout("[Dart kernel] Info:file created successfully")
+                os.rename(source_file.name,os.path.join(os.path.abspath(''),newsrcfilename))
+                newsrcfilename=os.path.join(os.path.abspath(''),newsrcfilename)
+                self._write_to_stdout("[Dart kernel] Info:file created successfully\n")
+        if len(magics['noruncode'])>0:
             return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
-        p = self.create_jupyter_subprocess(['dart',source_file.name]+ magics['args'],cwd=None,shell=False)
+        
+        p = self.create_jupyter_subprocess(['dart','--verbose',newsrcfilename]+ magics['args'],cwd=None,shell=False)
         #p = self.create_jupyter_subprocess([binary_file.name]+ magics['args'],cwd=None,shell=False)
         #p = self.create_jupyter_subprocess([self.master_path, binary_file.name] + magics['args'],cwd='/tmp',shell=True)
         while p.poll() is None:
@@ -328,8 +339,8 @@ class DartKernel(Kernel):
         p.write_contents()
 
         # now remove the files we have just created
-        # os.remove(source_file.name)
-        #os.remove(binary_file.name)
+        # if len(magics['file'])<1:
+        os.remove(source_file.name)
         self.cleanup_files()
         if p.returncode != 0:
             self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
