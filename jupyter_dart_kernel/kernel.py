@@ -252,6 +252,9 @@ class DartKernel(Kernel):
                 if line.strip()[3:] == "onlyrunnotecmd":
                     magics['onlyrunnotecmd'] += ['true']
                     continue
+                findObj= re.search( r':(.*)',line)
+                if not findObj or len(findObj.group(0))<2:
+                    continue
                 key, value = line.strip()[3:].split(":", 2)
                 key = key.strip().lower()
 
@@ -268,6 +271,7 @@ class DartKernel(Kernel):
                         magics[key] = value
                     else:
                         magics[key] =''
+                        continue
                     if len(magics['include'])>0:
                         index1=line.find('//%')
                         line=self.readcodefile(magics['include'],index1)
@@ -348,9 +352,6 @@ class DartKernel(Kernel):
 
         p.write_contents()
 
-        # now remove the files we have just created
-        # if os.path.exists(source_file.name):
-        #     os.remove(source_file.name)
         self.cleanup_files()
         if p.returncode != 0:
             self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
