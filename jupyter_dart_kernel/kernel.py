@@ -125,7 +125,8 @@ class DartKernel(Kernel):
         for file in self.files:
             if(os.path.exists(file)):
                 os.remove(file)
-        os.remove(self.master_path)
+        if(os.path.exists(self.master_path)):
+            os.remove(self.master_path)
 
     def new_temp_file(self, **kwargs):
         """Create a new temp file to be deleted when the kernel shuts down"""
@@ -148,6 +149,8 @@ class DartKernel(Kernel):
     def readcodefile(self,filename,spacecount=0):
         filecode=''
         codelist1=None
+        if not os.path.exists(filename):
+            return ''
         with open(os.path.join(os.path.abspath(''),filename), 'r') as codef1:
             codelist1 = codef1.readlines()
         if len(codelist1)>0:
@@ -256,14 +259,18 @@ class DartKernel(Kernel):
                     for flag in value.split():
                         magics[key] += [flag]
                 elif key == "file":
-                    for flag in value.split():
-                        magics[key] += [flag]
+                    if len(value)>0:
+                        magics[key] = value[re.search(r'[^/]',value).start():]
+                    else:
+                        magics[key] ='newfile'
                 elif key == "include":
-                    for flag in value.split():
-                        magics[key] += [flag]
+                    if len(value)>0:
+                        magics[key] = value
+                    else:
+                        magics[key] =''
                     if len(magics['include'])>0:
                         index1=line.find('//%')
-                        line=self.readcodefile(magics['include'][0],index1)
+                        line=self.readcodefile(magics['include'],index1)
                         actualCode += line + '\n'
                 elif key == "command":
                     magics[key] = [value]
@@ -318,11 +325,14 @@ class DartKernel(Kernel):
             newsrcfilename=source_file.name
             
             if len(magics['file'])>0:
-                newsrcfilename = magics['file'][0]
-                # for x in jfile: self._write_to_stderr("file " + x + " ")
-                os.rename(source_file.name,os.path.join(os.path.abspath(''),newsrcfilename))
-                newsrcfilename=os.path.join(os.path.abspath(''),newsrcfilename)
-                self._write_to_stdout("[Dart kernel] Info:file created successfully\n")
+                newsrcfilename = magics['file']
+                newsrcfilename = os.path.join(os.path.abspath(''),newsrcfilename)
+                if os.path.exists(newsrcfilename):
+                    newsrcfilename +=".new"
+                if not os.path.exists(os.path.dirname(newsrcfilename)) :
+                    os.makedirs(os.path.dirname(newsrcfilename))
+                os.rename(source_file.name,newsrcfilename)
+                self._write_to_stdout("[Dart kernel] Info:file "+ newsrcfilename +" created successfully\n")
         if len(magics['noruncode'])>0:
             return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
         
@@ -339,8 +349,8 @@ class DartKernel(Kernel):
         p.write_contents()
 
         # now remove the files we have just created
-        # if len(magics['file'])<1:
-        os.remove(source_file.name)
+        # if os.path.exists(source_file.name):
+        #     os.remove(source_file.name)
         self.cleanup_files()
         if p.returncode != 0:
             self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
