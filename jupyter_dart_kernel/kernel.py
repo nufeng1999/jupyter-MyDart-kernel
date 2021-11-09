@@ -16,7 +16,7 @@ class RealTimeSubprocess(subprocess.Popen):
 
     inputRequest = "<inputRequest>"
 
-    def __init__(self, cmd, write_to_stdout, write_to_stderr, read_from_stdin,cwd=None,shell=False):
+    def __init__(self, cmd, write_to_stdout, write_to_stderr, read_from_stdin,cwd=None,shell=False,env=None):
         """
         :param cmd: the command to execute
         :param write_to_stdout: a callable that will be called with chunks of data from stdout
@@ -26,7 +26,7 @@ class RealTimeSubprocess(subprocess.Popen):
         self._write_to_stderr = write_to_stderr
         self._read_from_stdin = read_from_stdin
 
-        super().__init__(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=0,cwd=cwd,shell=shell)
+        super().__init__(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE, bufsize=0,cwd=cwd,shell=shell,env=env)
 
         self._stdout_queue = Queue()
         self._stdout_thread = Thread(target=RealTimeSubprocess._enqueue_output, args=(self.stdout, self._stdout_queue))
@@ -197,12 +197,15 @@ class DartKernel(Kernel):
             self._write_to_stdout("[Dart kernel] Info:dart command success.")
         return
 
-    def create_jupyter_subprocess(self, cmd,cwd=None,shell=False):
-        return RealTimeSubprocess(cmd,
+    def create_jupyter_subprocess(self, cmd,cwd=None,shell=False,env=None):
+        try:
+            return RealTimeSubprocess(cmd,
                                   self._write_to_stdout,
                                   self._write_to_stderr,
-                                  self._read_from_stdin,cwd,shell)
-
+                                  self._read_from_stdin,cwd,shell,env)
+        except Exception as e:
+            self._write_to_stdout("RealTimeSubprocess err:"+str(e))
+            raise
     def generate_dartfile(self, source_filename, binary_filename, cflags=None, ldflags=None):
 
         return
@@ -229,6 +232,14 @@ class DartKernel(Kernel):
         # for x in args: self._write_to_stderr(" " + x + " ")
         return self.create_jupyter_subprocess(args)
 
+    def _filter_env(self, envstr):
+        if envstr is None or len(envstr.strip())<1:
+            return os.environ
+        envstr=str(str(envstr.split("|")).split("=")).replace(" ","").replace("\'","").replace("\"","").replace("[","").replace("]","").replace("\\","")
+        env_list=envstr.split(",")
+        for i in range(0,len(env_list),2):
+            os.environ.setdefault(env_list[i],env_list[i+1])
+        return os.environ
     def _filter_magics(self, code):
 
         magics = {'cflags': [],
@@ -238,6 +249,7 @@ class DartKernel(Kernel):
                   'noruncode': [],
                   'include': [],
                   'command': [],
+                  'env':None,
                   'dartcmd': [],
                   'args': []}
 
@@ -285,6 +297,9 @@ class DartKernel(Kernel):
                         magics[key] += [flag]
                     if len(magics['dartcmd'])>0:
                         self.do_dart_command(magics['dartcmd'])
+                elif key == "env":
+                    envdict=self._filter_env(value)
+                    magics[key] =dict(envdict)
                 elif key == "args":
                     # Split arguments respecting quotes
                     for argument in re.findall(r'(?:[^\s,"]|"(?:\\.|[^"])*")+', value):
@@ -340,7 +355,7 @@ class DartKernel(Kernel):
         if len(magics['noruncode'])>0:
             return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
         
-        p = self.create_jupyter_subprocess(['dart','--verbose',newsrcfilename]+ magics['args'],cwd=None,shell=False)
+        p = self.create_jupyter_subprocess(['dart','--verbose',newsrcfilename]+ magics['args'],cwd=None,shell=False,env=magics['env'])
         #p = self.create_jupyter_subprocess([binary_file.name]+ magics['args'],cwd=None,shell=False)
         #p = self.create_jupyter_subprocess([self.master_path, binary_file.name] + magics['args'],cwd='/tmp',shell=True)
         while p.poll() is None:
