@@ -86,7 +86,7 @@ class RealTimeSubprocess(subprocess.Popen):
 
 
 class DartKernel(Kernel):
-    implementation = 'jupyter_dart_kernel'
+    implementation = 'jupyter_MyDart_kernel'
     implementation_version = '1.0'
     language = 'Dart'
     language_version = '2.X.X'
@@ -116,7 +116,7 @@ class DartKernel(Kernel):
         self.master_path = mastertemp[1]
         self.resDir = path.join(path.dirname(path.realpath(__file__)), 'resources')
         filepath = path.join(self.resDir, 'master.c')
-        subprocess.call(['gcc', filepath, '-std=c11', '-rdynamic', '-ldl', '-o', self.master_path])
+        # subprocess.call(['gcc', filepath, '-std=c11', '-rdynamic', '-ldl', '-o', self.master_path])
 
     def cleanup_files(self):
         """Remove all the temporary files created by the kernel"""

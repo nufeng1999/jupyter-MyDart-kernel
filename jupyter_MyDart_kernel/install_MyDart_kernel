@@ -12,11 +12,11 @@ kernel_json = {
     "argv": [
         "python3",
         "-m",
-        "jupyter_dart_kernel",
+        "jupyter_MyDart_kernel",
         "-f",
         "{connection_file}"
     ],
-    "display_name": "Dart",
+    "display_name": "MyDart",
     "language": "dart"
 }
 
@@ -29,7 +29,7 @@ def install_my_kernel_spec(user=True, prefix=None):
         # TODO: Copy resources once they're specified
 
         print('Installing IPython kernel spec')
-        KernelSpecManager().install_kernel_spec(td, 'dart', user=user, prefix=prefix)
+        KernelSpecManager().install_kernel_spec(td, 'MyDart', user=user, prefix=prefix)
 
 
 def _is_root():
