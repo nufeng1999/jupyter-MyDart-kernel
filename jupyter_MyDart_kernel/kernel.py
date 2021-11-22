@@ -139,7 +139,6 @@ class IREPLWrapper(replwrap.REPLWrapper):
                         else:
                             if self.startflag :
                                 continue
-                            self.line_output_callback("\nexpect_exact break2 :"+ str(pos) +"\n")
                             run_time = time.time() - cmdstart_time
                             if run_time > 10:
                                 break
@@ -246,11 +245,13 @@ class DartKernel(Kernel):
             "int main(List<String> arguments){\n"
 
     main_foot = "\nreturn 0;\n}"
-
+    
+    silent=None
     g_rtsps={}
     g_chkreplexit=True
     def __init__(self, *args, **kwargs):
         super(DartKernel, self).__init__(*args, **kwargs)
+        self.kernelinfo='[MyDart Kernel]'
         self._allow_stdin = True
         self.readOnlyFileSystem = False
         self.bufferedOutput = True
@@ -311,6 +312,26 @@ class DartKernel(Kernel):
         file = tempfile.NamedTemporaryFile(**kwargs)
         self.files.append(file.name)
         return file
+
+    def _log(self, output,level=1,outputtype='text/plain'):
+        streamname='stdout'
+        if not self.silent:
+            prestr=self.kernelinfo+' Info:'
+            if level==2:
+                prestr=self.kernelinfo+' Warning:'
+                streamname='stderr'
+            elif level==3:
+                prestr=self.kernelinfo+' Error:'
+                streamname='stderr'
+            else:
+                prestr=self.kernelinfo+' Info:'
+                streamname='stdout'
+            if len(outputtype)>0 and (level!=2 or level!=3):
+                self._write_display_data(mimetype=outputtype,contents=prestr+output)
+                return
+            # Send standard output
+            stream_content = {'name': streamname, 'text': prestr+output}
+            self.send_response(self.iopub_socket, 'stream', stream_content)
 
     def _write_display_data(self,mimetype='text/html',contents=""):
 
@@ -498,24 +519,6 @@ class DartKernel(Kernel):
         else:
             self._write_to_stdout("[Dart kernel] Info:dart command success.")
         return
-    def do_dart_command(self,commands=None,cwd=None,magics=None):
-        p = self.create_jupyter_subprocess(['dart']+commands,cwd=os.path.abspath(''),shell=False)
-        self.g_rtsps[str(p.pid)]=p
-        if magics!=None and len(magics['showpid'])>0:
-            self._write_to_stdout("The process PID:"+str(p.pid)+"\n")
-        while p.poll() is None:
-            p.write_contents()
-        # wait for threads to finish, so output is always shown
-        p._stdout_thread.join()
-        p._stderr_thread.join()
-        del self.g_rtsps[str(p.pid)]
-        p.write_contents()
-
-        if p.returncode != 0:
-            self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
-        else:
-            self._write_to_stdout("[Dart kernel] Info:dart command success.")
-        return
 
     
     def do_flutter_command(self,commands=None,cwd=None,magics=None):
@@ -560,9 +563,6 @@ class DartKernel(Kernel):
             self._write_to_stdout("RealTimeSubprocess err:"+str(e))
             raise
 
-    def generate_dartfile(self, source_filename, binary_filename, cflags=None, ldflags=None):
-
-        return
     def generate_dartfile(self, source_filename, binary_filename, cflags=None, ldflags=None):
 
         return
@@ -721,129 +721,6 @@ class DartKernel(Kernel):
                 actualCode += line + '\n'
 
         return magics, actualCode
-    def _filter_magics(self, code):
-
-        magics = {'cflags': [],
-                  'ldflags': [],
-                  'file': [],
-                  'include': [],
-
-                  'repllistpid': [],
-                  'replcmdmode': [],
-                  'replprompt': [],
-                  'replsetip': "\r\n",
-                  'replchildpid':"0",
-
-                  'showpid': [],
-                  'norunnotecmd': [],
-                  'noruncode': [],
-                  'command': [],
-                  'fluttercmd': [],
-                  'dartcmd': [],
-                  'outputtype':'text/plain',
-                  'env':None,
-                  'runmode': [],
-                  'pid': [],
-                  'pidcmd': [],
-                  'args': []}
-
-        actualCode = ''
-
-        for line in code.splitlines():
-            orgline=line
-            if line.strip().startswith('//%'):
-                if line.strip()[3:] == "noruncode":
-                    magics['noruncode'] += ['true']
-                    continue
-                elif line.strip()[3:] == "showpid":
-                    magics['showpid'] += ['true']
-                    continue
-                elif line.strip()[3:] == "repllistpid":
-                    magics['repllistpid'] += ['true']
-                    self.repl_listpid()
-                    continue
-                elif line.strip()[3:] == "replcmdmode":
-                    magics['replcmdmode'] += ['replcmdmode']
-                    continue
-                elif line.strip()[3:] == "replprompt":
-                    magics['replprompt'] += ['replprompt']
-                    continue
-                elif line.strip()[3:] == "onlyrunnotecmd":
-                    magics['onlyrunnotecmd'] += ['true']
-                    continue
-                findObj= re.search( r':(.*)',line)
-                if not findObj or len(findObj.group(0))<2:
-                    continue
-                key, value = line.strip()[3:].split(":", 2)
-                key = key.strip().lower()
-
-                if key in ['ldflags', 'cflags']:
-                    for flag in value.split():
-                        magics[key] += [flag]
-                elif key == "runmode":
-                    if len(value)>0:
-                        magics[key] = value[re.search(r'[^/]',value).start():]
-                    else:
-                        magics[key] ='real'
-                elif key == "file":
-                    if len(value)>0:
-                        magics[key] = value[re.search(r'[^/]',value).start():]
-                    else:
-                        magics[key] ='newfile'
-                elif key == "include":
-                    if len(value)>0:
-                        magics[key] = value
-                    else:
-                        magics[key] =''
-                        continue
-                    if len(magics['include'])>0:
-                        index1=line.find('//%')
-                        line=self.readcodefile(magics['include'],index1)
-                        actualCode += line + '\n'
-                elif key == "pidcmd":
-                    magics['pidcmd'] = [value]
-                    if len(magics['pidcmd'])>0:
-                        findObj= value.split(",",1)
-                        if findObj and len(findObj)>1:
-                            pid=findObj[0]
-                            cmd=findObj[1]
-                            self.send_cmd(pid=pid,cmd=cmd)
-                elif key == "replsetip":
-                    magics['replsetip'] = value
-                elif key == "replchildpid":
-                    magics['replchildpid'] = value
-                elif key == "command" or key == "cmd":
-                    magics['command'] = [value]
-                    if len(magics['command'])>0:
-                        self.do_shell_command(magics['command'],env=magics['env'])
-                elif key == "dartcmd":
-                    for flag in value.split():
-                        magics[key] += [flag]
-                    if len(magics['dartcmd'])>0:
-                        self.do_dart_command(magics['dartcmd'],magics=magics)
-                elif key == "fluttercmd":
-                    for flag in value.split():
-                        magics[key] += [flag]
-                    if len(magics['fluttercmd'])>0:
-                        self.do_flutter_command(magics['fluttercmd'],magics=magics)
-                elif key == "env":
-                    envdict=self._filter_env(value)
-                    magics[key] =dict(envdict)
-                elif key == "outputtype":
-                    magics[key]=value
-                elif key == "args":
-                    # Split arguments respecting quotes
-                    for argument in re.findall(r'(?:[^\s,"]|"(?:\\.|[^"])*")+', value):
-                        magics['args'] += [argument.strip('"')]
-
-                # always add empty line, so line numbers don't change
-                # actualCode += '\n'
-
-            # keep lines which did not contain magics
-            else:
-                actualCode += line + '\n'
-
-        return magics, actualCode
 
     def _add_main(self, magics, code):
         # remove comments
@@ -854,58 +731,10 @@ class DartKernel(Kernel):
 
         if not x:
             code = self.main_head + code + self.main_foot
-            magics['cflags'] += ['-v','error']
+            magics['cflags'] += ['-lm']
 
         return magics, code
 
-    def do_execute(self, code, silent, store_history=True,
-                   user_expressions=None, allow_stdin=True):
-        
-        magics, code = self._filter_magics(code)
-        if len(magics['replcmdmode'])>0:
-            return self.send_replcmd(code, silent, store_history=True,
-                   user_expressions=None, allow_stdin=False)
-        if len(magics['noruncode'])>0 and ( len(magics['command'])>0 or len(magics['dartcmd'])>0):
-            return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
-        if len(magics['file'])<1:
-            magics, code = self._add_main(magics, code)
-        
-        with self.new_temp_file(suffix='.dart',dir=os.path.abspath('')) as source_file:
-            source_file.write(code)
-            source_file.flush()
-            newsrcfilename=source_file.name
-            
-            if len(magics['file'])>0:
-                newsrcfilename = magics['file']
-                newsrcfilename = os.path.join(os.path.abspath(''),newsrcfilename)
-                if os.path.exists(newsrcfilename):
-                    newsrcfilename +=".new"
-                if not os.path.exists(os.path.dirname(newsrcfilename)) :
-                    os.makedirs(os.path.dirname(newsrcfilename))
-                os.rename(source_file.name,newsrcfilename)
-                self._write_to_stdout("[Dart kernel] Info:file "+ newsrcfilename +" created successfully\n")
-        if len(magics['noruncode'])>0:
-            return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
-        
-        p = self.create_jupyter_subprocess(['dart','--verbose',newsrcfilename]+ magics['args'],cwd=None,shell=False,env=magics['env'])
-        #p = self.create_jupyter_subprocess([binary_file.name]+ magics['args'],cwd=None,shell=False)
-        #p = self.create_jupyter_subprocess([self.master_path, binary_file.name] + magics['args'],cwd='/tmp',shell=True)
-        self.g_rtsps[str(p.pid)]=p
-        if magics!=None and len(magics['showpid'])>0:
-            self._write_to_stdout("The process PID:"+str(p.pid)+"\n")
-        while p.poll() is None:
-            p.write_contents(magics)
-
-        # wait for threads to finish, so output is always shown
-        p._stdout_thread.join()
-        p._stderr_thread.join()
-        del self.g_rtsps[str(p.pid)]
-        p.write_contents(magics)
-
-        self.cleanup_files()
-        if p.returncode != 0:
-            self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
-        return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
     def do_execute(self, code, silent, store_history=True,
                    user_expressions=None, allow_stdin=True):
         
