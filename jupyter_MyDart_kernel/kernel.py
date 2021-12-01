@@ -29,6 +29,7 @@ import time
 import importlib
 import importlib.util
 import inspect
+from plugins._filter2_magics import Magics
 class IREPLWrapper(replwrap.REPLWrapper):
     def __init__(self, write_to_stdout, write_to_stderr, read_from_stdin,
                 cmd_or_spawn,replsetip, orig_prompt, prompt_change,
@@ -194,6 +195,7 @@ class DartKernel(Kernel):
         self.chk_replexit_thread.daemon = True
         self.chk_replexit_thread.start()
         self.init_plugin()
+        self.mag=Magics(self,self.plugins)
     isjj2code=False
     def _is_jj2_begin(self,line):
         if line==None or line=='':return ''
@@ -641,234 +643,6 @@ class DartKernel(Kernel):
             li= [i for i in li if i != '']
             os.environ.setdefault(str(li[0]),li[1])
         return os.environ
-#Dart _filter_magics
-    def _filter_magics(self, code):
-        magics = {
-                  'repllistpid': [],
-                  'replcmdmode': [],
-                  'replprompt': [],
-                  'replsetip': "\r\n",
-                  'replchildpid':"0",
-                #   'file': [],
-                #   'overwritefile': [],
-                #   'include': [],
-                #   'templatefile': [],
-                #   'test': [],
-                #   'showpid': [],
-                #   'norunnotecmd': [],
-                #   'noruncode': [],
-                #   'command': [],
-                #   'fluttercmd': [],
-                #   'dartcmd': [],
-                #   'env':None,
-                  'outputtype':'text/plain',
-                  'runmode': [],
-                  'pid': [],
-                  'pidcmd': [],
-                  'args': []}
-        actualCode = ''
-        newactualCode = ''
-        for line in code.splitlines():
-            orgline=line
-            line=self.forcejj2code(line)
-            if line==None or line.strip()=='': continue
-            if self._is_specialID(line):
-                if line.strip()[3:] == "repllistpid":
-                    magics['repllistpid'] += ['true']
-                    self.repl_listpid()
-                    continue
-                elif line.strip()[3:] == "replcmdmode":
-                    magics['replcmdmode'] += ['replcmdmode']
-                    continue
-                elif line.strip()[3:] == "replprompt":
-                    magics['replprompt'] += ['replprompt']
-                    continue
-                else:
-                    #Dart _filter_magics
-                        def _filter_magics(self, code):
-                            magics = {
-                                      'repllistpid': [],
-                                      'replcmdmode': [],
-                                      'replprompt': [],
-                                      'replsetip': "\r\n",
-                                      'replchildpid':"0",
-                                    #   'file': [],
-                                    #   'overwritefile': [],
-                                    #   'include': [],
-                                    #   'templatefile': [],
-                                    #   'test': [],
-                                    #   'showpid': [],
-                                    #   'norunnotecmd': [],
-                                    #   'noruncode': [],
-                                    #   'command': [],
-                                    #   'fluttercmd': [],
-                                    #   'dartcmd': [],
-                                    #   'env':None,
-                                      'outputtype':'text/plain',
-                                      'runmode': [],
-                                      'pid': [],
-                                      'pidcmd': [],
-                                      'args': []}
-                            actualCode = ''
-                            newactualCode = ''
-                            for line in code.splitlines():
-                                orgline=line
-                                line=self.forcejj2code(line)
-                                if line==None or line.strip()=='': continue
-                                if self._is_specialID(line):
-                                    if line.strip()[3:] == "repllistpid":
-                                        magics['repllistpid'] += ['true']
-                                        self.repl_listpid()
-                                        continue
-                                    elif line.strip()[3:] == "replcmdmode":
-                                        magics['replcmdmode'] += ['replcmdmode']
-                                        continue
-                                    elif line.strip()[3:] == "replprompt":
-                                        magics['replprompt'] += ['replprompt']
-                                        continue
-                                    else:
-                                        pass
-                                    findObj= re.search( r':(.*)',line)
-                                    if not findObj or len(findObj.group(0))<2:
-                                        continue
-                                    key, value = line.strip()[3:].split(":", 2)
-                                    key = key.strip().lower()
-                                    if key == "runmode":
-                                        if len(value)>0:
-                                            magics[key] = value[re.search(r'[^/]',value).start():]
-                                        else:
-                                            magics[key] ='real'
-                                    elif key == "replsetip":
-                                        magics['replsetip'] = value
-                                    elif key == "replchildpid":
-                                        magics['replchildpid'] = value['command'],env=magics['env'])
-                                    elif key == "pidcmd":
-                                        magics['pidcmd'] = [value]
-                                        if len(magics['pidcmd'])>0:
-                                            findObj= value.split(",",1)
-                                            if findObj and len(findObj)>1:
-                                                pid=findObj[0]
-                                                cmd=findObj[1]
-                                                self.send_cmd(pid=pid,cmd=cmd)
-                                    elif key == "outputtype":
-                                        magics[key]=value
-                                    elif key == "args":
-                                        # Split arguments respecting quotes
-                                        for argument in re.findall(r'(?:[^\s,"]|"(?:\\.|[^"])*")+', value):
-                                            magics['args'] += [argument.strip('"')]
-                                    else:
-                                        pass
-                                        #_filter_magics_i2
-                                        for pkey,pvalue in self.ISplugins.items():
-                                            # print( pkey +":"+str(len(pvalue))+"\n")
-                                            for pobj in pvalue:
-                                                newline=''
-                                                try:
-                                                    if key in pobj.getIDSptag(pobj):
-                                                        newline=pobj.on_ISpCodescanning(pobj,key,value,magics,line)
-                                                        if newline=='':continue
-                                                except Exception as e:
-                                                    pass
-                                                finally:pass
-                                                if newline!=None and newline!='':
-                                                    actualCode += newline + '\n'
-                                        # always add empty line, so line numbers don't change
-                                        # actualCode += '\n'
-                                # keep lines which did not contain magics
-                                else:
-                                    actualCode += line + '\n'
-                            newactualCode=actualCode
-                            #_filter_magics_pend
-                            if len(self.addkey2dict(magics,'file'))>0 :
-                                newactualCode=''
-                                for line in actualCode.splitlines():
-                                    try:
-                                        if len(self.addkey2dict(magics,'test'))<1:
-                                            line=self.cleantestcode(line)
-                                        if line=='':continue
-                                        line=self.callIDplugin(line)
-                                        if line=='':continue
-                                        line=self.cleandqm(line)
-                                        if line=='':continue
-                                        line=self.cleansqm(line)
-                                        if self.cleannotes(line)=='':
-                                            continue
-                                        else:
-                                            newactualCode += line + '\n'
-                                    except Exception as e:
-                                        self._log(str(e),3)
-                            return magics, newactualCode
-                    pass
-                findObj= re.search( r':(.*)',line)
-                if not findObj or len(findObj.group(0))<2:
-                    continue
-                key, value = line.strip()[3:].split(":", 2)
-                key = key.strip().lower()
-                if key == "runmode":
-                    if len(value)>0:
-                        magics[key] = value[re.search(r'[^/]',value).start():]
-                    else:
-                        magics[key] ='real'
-                elif key == "replsetip":
-                    magics['replsetip'] = value
-                elif key == "replchildpid":
-                    magics['replchildpid'] = value['command'],env=magics['env'])
-                elif key == "pidcmd":
-                    magics['pidcmd'] = [value]
-                    if len(magics['pidcmd'])>0:
-                        findObj= value.split(",",1)
-                        if findObj and len(findObj)>1:
-                            pid=findObj[0]
-                            cmd=findObj[1]
-                            self.send_cmd(pid=pid,cmd=cmd)
-                elif key == "outputtype":
-                    magics[key]=value
-                elif key == "args":
-                    # Split arguments respecting quotes
-                    for argument in re.findall(r'(?:[^\s,"]|"(?:\\.|[^"])*")+', value):
-                        magics['args'] += [argument.strip('"')]
-                else:
-                    pass
-                    #_filter_magics_i2
-                    for pkey,pvalue in self.ISplugins.items():
-                        # print( pkey +":"+str(len(pvalue))+"\n")
-                        for pobj in pvalue:
-                            newline=''
-                            try:
-                                if key in pobj.getIDSptag(pobj):
-                                    newline=pobj.on_ISpCodescanning(pobj,key,value,magics,line)
-                                    if newline=='':continue
-                            except Exception as e:
-                                pass
-                            finally:pass
-                            if newline!=None and newline!='':
-                                actualCode += newline + '\n'
-                    # always add empty line, so line numbers don't change
-                    # actualCode += '\n'
-            # keep lines which did not contain magics
-            else:
-                actualCode += line + '\n'
-        newactualCode=actualCode
-        #_filter_magics_pend
-        if len(self.addkey2dict(magics,'file'))>0 :
-            newactualCode=''
-            for line in actualCode.splitlines():
-                try:
-                    if len(self.addkey2dict(magics,'test'))<1:
-                        line=self.cleantestcode(line)
-                    if line=='':continue
-                    line=self.callIDplugin(line)
-                    if line=='':continue
-                    line=self.cleandqm(line)
-                    if line=='':continue
-                    line=self.cleansqm(line)
-                    if self.cleannotes(line)=='':
-                        continue
-                    else:
-                        newactualCode += line + '\n'
-                except Exception as e:
-                    self._log(str(e),3)
-        return magics, newactualCode
     def _add_main(self, magics, code):
         tmpCode = re.sub(r"//.*", "", code)
         tmpCode = re.sub(r"/\*.*?\*/", "", tmpCode, flags=re.M|re.S)
@@ -913,13 +687,14 @@ class DartKernel(Kernel):
                    user_expressions=None, allow_stdin=True):
         try:
             self.silent = silent
-            magics, code = self._filter_magics(code)
+            # magics, code = self._filter_magics(code)
+            magics, code = self.mag.filter(code)
             if len(self.addkey2dict(magics,'replcmdmode'))>0:
                 return self.send_replcmd(code, silent, store_history=True,
                     user_expressions=None, allow_stdin=False)
-            if len(self.addkey2dict(magics,'noruncode'))>0
+            if (len(self.addkey2dict(magics,'noruncode'))>0
                 and ( len(self.addkey2dict(magics,'command'))>0 
-                or len(self.addkey2dict(magics,'dartcmd'))>0):
+                or len(self.addkey2dict(magics,'dartcmd'))>0)):
                 return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
             if len(self.addkey2dict(magics,'file'))<1:
                 magics, code = self._add_main(magics, code)
@@ -936,9 +711,9 @@ class DartKernel(Kernel):
                 # Generate new src file
                 bcancel_exec,retstr=self.raise_plugin(code,magics,return_code,fil_ename,1,2)
                 if bcancel_exec:return {'status': 'ok', 'execution_count': self.execution_count, 'payload': [], 'user_expressions': {}}
-                if len(self.addkey2dict(magics,'file'))>1:
+                if len(self.addkey2dict(magics,'file'))>0:
                         fil_ename=magics['file'][0]
-                    else: fil_ename=source_file.name
+                else: fil_ename=source_file.name
                 # Generate executable file :being
                 # Generate executable file :end
             if len(self.addkey2dict(magics,'noruncode'))>0:
