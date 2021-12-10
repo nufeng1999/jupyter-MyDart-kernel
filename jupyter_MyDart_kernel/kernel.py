@@ -1041,8 +1041,8 @@ class DartKernel(MyKernel):
     implementation_version = '1.0'
     language = 'Dart'
     language_version = '2.X.X'
-    language_info = {'name': 'text/x-csrc',
-                     'mimetype': 'text/x-csrc',
+    language_info = {'name': 'text/dart',
+                     'mimetype': 'text/dart',
                      'file_extension': '.dart'}
     runfiletype='script'
     banner = "Dart kernel.\n" \
