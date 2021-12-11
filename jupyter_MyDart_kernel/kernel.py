@@ -209,6 +209,22 @@ class MyKernel(Kernel):
         self.chk_replexit_thread.start()
         self.init_plugin()
         self.mag=Magics(self,self.plugins,self.ICodePreprocs)
+    pausestr='''
+get_char()
+{
+SAVEDSTTY=`stty -g`
+stty -echo
+stty cbreak
+dd if=/dev/tty bs=1 count=1 2> /dev/null
+stty -raw
+stty echo
+stty $SAVEDSTTY
+}
+echo ""
+echo "Press any key to start...or Press Ctrl+c to cancel"
+char=`get_char`
+echo "OK"
+'''
     silent=None
     jinja2_env = Environment()
     g_rtsps={}
@@ -690,6 +706,9 @@ class MyKernel(Kernel):
                     execfile+=x+" "
                 cmdshstr=self.create_termrunsh(execfile,magics)
                 cmd=[magics['term'],'--',cmdshstr]
+            cstr=''
+            for x in cmd: cstr+=x+" "
+            self._logln(cstr)
             return RealTimeSubprocess(cmd,
                                   self._write_to_stdout,
                                   self._write_to_stderr,
@@ -698,22 +717,7 @@ class MyKernel(Kernel):
             self._write_to_stdout("RealTimeSubprocess err:"+str(e))
             raise
     def create_termrunsh(self,execfile,magics):
-        pausestr='''
-get_char()
-{
-SAVEDSTTY=`stty -g`
-stty -echo
-stty cbreak
-dd if=/dev/tty bs=1 count=1 2> /dev/null
-stty -raw
-stty echo
-stty $SAVEDSTTY
-}
-echo ""
-echo "Press any key to start...or Press Ctrl+c to cancel"
-char=`get_char`
-echo "OK"
-'''
+        pausestr=self.pausestr
         termrunsh="\n"+execfile+"\n"+pausestr+"\n"
         termrunsh_file=self.create_codetemp_file(magics,termrunsh,suffix='.sh')
         newsrcfilename=termrunsh_file.name
@@ -913,7 +917,7 @@ echo "OK"
         # self._logln("The process end:"+str(p.pid))
         # return_code=p.returncode
         if p.returncode != 0:
-            self._log("Executable exited with code {}".format(p.returncode),2)
+            self._logln("Executable exited with code {}".format(p.returncode),2)
         return bcancel_exec,retinfo,magics, code,fil_ename,retstr
     def dor_create_codefile(self,magics,code, silent, store_history=True,
                     user_expressions=None, allow_stdin=True):    
@@ -1117,7 +1121,7 @@ class DartKernel(MyKernel):
         p = self.create_jupyter_subprocess(['dart']+commands,cwd=os.path.abspath(''),shell=False)
         self.g_rtsps[str(p.pid)]=p
         if magics!=None and len(magics['showpid'])>0:
-            self._write_to_stdout("The process PID:"+str(p.pid)+"\n")
+            self._logln("The process PID:"+str(p.pid)+"\n")
         while p.poll() is None:
             p.write_contents()
         # wait for threads to finish, so output is always shown
@@ -1126,15 +1130,15 @@ class DartKernel(MyKernel):
         del self.g_rtsps[str(p.pid)]
         p.write_contents()
         if p.returncode != 0:
-            self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
+            self._logln("Executable exited with code {}".format(p.returncode),3)
         else:
-            self._write_to_stdout("[Dart kernel] Info:dart command success.")
+            self._logln("Info:dart command success.")
         return
     def do_flutter_command(self,commands=None,cwd=None,magics=None):
         p = self.create_jupyter_subprocess(['flutter']+commands,cwd=os.path.abspath(''),shell=False)
         self.g_rtsps[str(p.pid)]=p
         if magics!=None and len(magics['showpid'])>0:
-            self._write_to_stdout("The process PID:"+str(p.pid)+"\n")
+            self._logln("The process PID:"+str(p.pid)+"\n")
         while p.poll() is None:
             p.write_contents()
         # wait for threads to finish, so output is always shown
@@ -1143,9 +1147,9 @@ class DartKernel(MyKernel):
         del self.g_rtsps[str(p.pid)]
         p.write_contents()
         if p.returncode != 0:
-            self._write_to_stderr("[Dart kernel] Executable exited with code {}".format(p.returncode))
+            self._logln("Executable exited with code {}".format(p.returncode),3)
         else:
-            self._write_to_stdout("[Dart kernel] Info:flutter command success.")
+            self._logln("Info:flutter command success.")
         return
     def do_runcode(self,return_code,fil_ename,magics,code, silent, store_history=True,
                     user_expressions=None, allow_stdin=True):
