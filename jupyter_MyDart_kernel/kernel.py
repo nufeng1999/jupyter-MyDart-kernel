@@ -23,6 +23,7 @@ import signal
 import subprocess
 import tempfile
 import os
+import stat
 import sys
 import traceback
 import os.path as path
@@ -267,16 +268,36 @@ class MyKernel(Kernel):
         return line.strip().startswith('##test_end') or line.strip().startswith('//test_end')
     def _is_dqm_begin(self,line):
         if line==None or line=='':return ''
+        line=self.replacemany(line.strip(),(' '),'')
+        if '=\"\"\"' in line: 
+            self.isdstr=True
+            return False
+        if '\"\"\"' in line: 
+            if self.isdstr:return False
+            self.isdstr=False
+            return True
         return line.lstrip().startswith('\"\"\"')
     def _is_dqm_end(self,line):
         if line==None or line=='':return ''
-        return line.rstrip().endswith('\"\"\"')
+        if self.isdqm:
+            return line.rstrip().endswith('\"\"\"')
+        return False
     def _is_sqm_begin(self,line):
         if line==None or line=='':return ''
+        line=self.replacemany(line.strip(),(' '),'')
+        if '=\'\'\'' in line: 
+            self.issstr=True
+            return False
+        if '\'\'\'' in line: 
+            if self.issstr:return False
+            self.issstr=False
+            return True
         return line.lstrip().startswith('\'\'\'')
     def _is_sqm_end(self,line):
         if line==None or line=='':return ''
-        return line.rstrip().endswith('\'\'\'')
+        if self.issqm:
+            return line.rstrip().endswith('\'\'\'')
+        return False
     def cleanCdqm(self,code):
         return re.sub(r"/\*.*?\*/", "", code, flags=re.M|re.S)
     def cleanCnotes(self,code):
@@ -435,7 +456,9 @@ class MyKernel(Kernel):
             source_file.write(code)
             source_file.flush()
         return source_file
+    _loglevel='1'
     def _log(self, output,level=1,outputtype='text/plain'):
+        if self._loglevel=='0': return
         streamname='stdout'
         if not self.silent:
             prestr=self.kernelinfo+' Info:'
@@ -659,8 +682,14 @@ class MyKernel(Kernel):
         except Exception as e:
             self._log("Executable send_cmd error! "+str(e)+"\n")
         return
-    def create_jupyter_subprocess(self, cmd,cwd=None,shell=False,env=None):
+    def create_jupyter_subprocess(self, cmd,cwd=None,shell=False,env=None,magics=None):
         try:
+            if magics!=None and len(magics['runinterm'])>0 and len(magics['term'])>0:
+                execfile=''
+                for x in cmd:
+                    execfile+=x+" "
+                cmdshstr=self.create_termrunsh(execfile,magics)
+                cmd=[magics['term'],'--',cmdshstr]
             return RealTimeSubprocess(cmd,
                                   self._write_to_stdout,
                                   self._write_to_stderr,
@@ -668,6 +697,30 @@ class MyKernel(Kernel):
         except Exception as e:
             self._write_to_stdout("RealTimeSubprocess err:"+str(e))
             raise
+    def create_termrunsh(self,execfile,magics):
+        pausestr='''
+get_char()
+{
+SAVEDSTTY=`stty -g`
+stty -echo
+stty cbreak
+dd if=/dev/tty bs=1 count=1 2> /dev/null
+stty -raw
+stty echo
+stty $SAVEDSTTY
+}
+echo ""
+echo "Press any key to start...or Press Ctrl+c to cancel"
+char=`get_char`
+echo "OK"
+'''
+        termrunsh="\n"+execfile+"\n"+pausestr+"\n"
+        termrunsh_file=self.create_codetemp_file(magics,termrunsh,suffix='.sh')
+        newsrcfilename=termrunsh_file.name
+        fil_ename=newsrcfilename
+        self._logln(fil_ename)
+        os.chmod(newsrcfilename,stat.S_IRWXU+stat.S_IRGRP+stat.S_IXGRP+stat.S_IXOTH)
+        return fil_ename
     def generate_Pythonfile(self, source_filename, binary_filename, cflags=None, ldflags=None):
         return
     def _add_main(self, magics, code):
@@ -731,6 +784,9 @@ class MyKernel(Kernel):
             bcancel_exec,retstr=self.raise_plugin(code,magics,return_code,fil_ename,1,2)
             if bcancel_exec:return  self.get_retinfo()
             fil_ename=magics['codefilename']
+            if len(self.addkey2dict(magics,'noruncode'))>0:
+                bcancel_exec=True
+                return self.get_retinfo()
             bcancel_exec,retstr=self.raise_plugin(code,magics,return_code,fil_ename,2,1)
             if bcancel_exec:return  self.get_retinfo()
             bcancel_exec,retinfo,magics, code,fil_ename,retstr=self.do_compile_code(
@@ -743,9 +799,6 @@ class MyKernel(Kernel):
                 self._log("only run compile \n")
                 bcancel_exec=True
                 return retinfo
-            if len(self.addkey2dict(magics,'noruncode'))>0:
-                bcancel_exec=True
-                return self.get_retinfo()
             bcancel_exec,retstr=self.raise_plugin(code,magics,return_code,fil_ename,3,1)
             if bcancel_exec:return self.get_retinfo()
             self._logln("The process :"+fil_ename)
