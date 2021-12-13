@@ -140,10 +140,10 @@ class RealTimeSubprocess(subprocess.Popen):
             return res
         stderr_contents = read_all_from_queue(self._stderr_queue)
         if stderr_contents:
-            self._write_to_stderr(stderr_contents.decode())
+            self._write_to_stderr(stderr_contents.decode('UTF-8', errors='ignore'))
         stdout_contents = read_all_from_queue(self._stdout_queue)
         if stdout_contents:
-            contents = stdout_contents.decode()
+            contents = stdout_contents.decode('UTF-8', errors='ignore')
             # if there is input request, make output and then
             # ask frontend for input
             start = contents.find(self.__class__.inputRequest)

@@ -63,7 +63,7 @@ class MyInclude(IStag):
         if not os.path.exists(filename):
             return ''
         # self.kobj._log(os.path.join(os.path.abspath(''),filename+"\n"))
-        with open(os.path.join(os.path.abspath(''),filename), 'r') as codef1:
+        with open(os.path.join(os.path.abspath(''),filename), 'r',encoding="UTF-8") as codef1:
             codelist1 = codef1.readlines()
         #扫描源码
         # filecode=codelist1
