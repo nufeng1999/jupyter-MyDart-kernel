@@ -297,17 +297,18 @@ class Magics():
             self.kobj._logln(str(e))
         finally:pass
         return False
-    def call_stproc(self,magics,line,key,value)->Tuple[bool,bool,str]:
+    def call_stproc(self,magics,line,key,value)->str:
         if len(magics['st'])<1:return line
         newline=line
         try:
             if magics['st'].__contains__(key):
-                if len(magics[type+'f'][key])>0:
-                    for kfunc in magics[type+'f'][key]:
+                if len(magics['stf'][key])>0:
+                    for kfunc in magics['stf'][key]:
+                        # self.kobj._logln("call--------"+key)
                         newline=kfunc(key,value,magics,newline)
                 return newline
         except Exception as e:
-            self.kobj._logln(str(e))
+            self.kobj._logln("call_stproc "+str(e))
         finally:pass
         return newline
     def raise_ICodescan(self,magics,code)->Tuple[bool,str]:
