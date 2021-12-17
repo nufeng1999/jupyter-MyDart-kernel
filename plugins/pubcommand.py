@@ -1,5 +1,6 @@
 from typing import Dict, Tuple, Sequence,List
 from plugins.ISpecialID import IStag,IDtag,IBtag,ITag
+import platform
 import os
 import re
 class MyPubcommand(IStag):
@@ -54,11 +55,15 @@ class MyPubcommand(IStag):
         return ''
     def do_command(self,commands=None,cwd=None,magics=None):
         try:
-            p = self.kobj.create_jupyter_subprocess(['pub']+commands,cwd=os.path.abspath(''),shell=False,magics=magics)
+            cmd=['pub']
+            if platform.system()=="Windows":
+                cmd=['cmd','/c','pub']
+            p = self.kobj.create_jupyter_subprocess(cmd+commands,cwd=os.path.abspath(''),shell=False,magics=magics)
             self.kobj.g_rtsps[str(p.pid)]=p
             if magics!=None and len(self.kobj.addkey2dict(magics,'showpid'))>0:
                 self.kobj._logln("The process PID:"+str(p.pid))
             returncode=p.wait_end(magics)
+            del self.g_rtsps[str(p.pid)]
             if returncode != 0:
                 self.kobj._logln("Executable exited with code {}".format(returncode),3)
             else:
