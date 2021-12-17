@@ -44,9 +44,9 @@ class MyFluttercommand(IStag):
     def on_after_completion(self,returncode,execfile,magics)->bool:
         return False
     def commandhander(self,key, value,magics,line):
-        # self.kobj._write_to_stdout(value+"\n")
-        for flag in value.split():
-            magics[key] += [flag]
+        magics['fluttercmd'] = value.strip()
         if len(magics['fluttercmd'])>0:
-            self.kobj.do_flutter_command(magics['fluttercmd'],magics=magics)
+            env=self.kobj.get_magicsSvalue(magics,'env')
+            if len(env)<1:env=None
+            self.kobj.do_Py_command(magics['fluttercmd'],env=env,magics=magics)
         return ''
