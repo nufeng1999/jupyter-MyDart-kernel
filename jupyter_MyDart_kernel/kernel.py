@@ -1262,7 +1262,7 @@ class DartKernel(MyKernel):
     implementation = 'jupyter_MyDart_kernel'
     implementation_version = '1.0'
     language = 'Dart'
-    language_version = '2.X.X'
+    language_version = ''
     language_info = {'name': 'text/dart',
                      'mimetype': 'text/dart',
                      'file_extension': '.dart'}
