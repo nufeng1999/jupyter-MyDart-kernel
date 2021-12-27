@@ -1,5 +1,8 @@
-# MyDart kernel for Jupyter
-[Example](https://github.com/nufeng1999/jupyter-MyDart-kernel/blob/master/example/jupyter_MyDart_readme.ipynb "Example")
+![](https://img.shields.io/badge/Jupyter-Kernel-green?link=https://jupyter.org/&link=https://github.com/jupyter/jupyter/wiki/Jupyter-kernels) ![](https://img.shields.io/badge/MyDart-Kernel-orange) ![](https://img.shields.io/github/watchers/nufeng1999/jupyter-MyDart-kernel) <img alt="ViewCount" src="https://views.whatilearened.today/views/github/nufeng1999/jupyter-MyDart-kernel.svg">
+    <a href="https://github.com/nufeng1999/jupyter-MyDart-kernel"><img alt="GitHub Clones" src="https://img.shields.io/badge/dynamic/json?color=success&label=Clone&query=count&url=https://raw.githubusercontent.com/nufeng1999/jupyter-MyDart-kernel/master/clone.json&logo=github"></a>
+# MyDart kernel for Jupyter  
+  
+[Example](https://github.com/nufeng1999/jupyter-MyDart-kernel/blob/master/example/MyDart.ipynb "Example")
 * Make sure you have the following requirements installed:
   * Dart
   * jupyter
