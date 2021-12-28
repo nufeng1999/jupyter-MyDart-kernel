@@ -779,9 +779,12 @@ echo "OK"
         return
     def create_jupyter_subprocess(self, cmd,cwd=None,shell=False,env=None,magics=None,outencode=None):
         try:
-            if env==None or len(env)<1:
-                env=os.environ
-            if magics!=None and len(self.addmagicsBkey(magics,'runinterm'))>0:
+            if env==None or len(env)<1:env=os.environ
+            
+            newcwd=self.get_magicsSvalue(magics,'cwd')
+            if len(newcwd.strip())>1:cwd=newcwd
+            if cwd==None:cwd=os.path.abspath('')
+            if magics!=None and magics['status']=='' and len(self.addmagicsBkey(magics,'runinterm'))>0:
                 self.inittermcmd(magics)
                 if len(magics['_st']['term'])<1:
                     self._logln("no term！",2)
@@ -798,16 +801,16 @@ echo "OK"
             cstr=''
             for x in cmd: cstr+=x+" "
             self._logln(cstr)
-            if(outencode==None or len(outencode)<0):
+            if(magics!=None and (outencode==None or len(outencode)<0)):
                 outencode=self.get_outencode(magics)
-            if(len(outencode)<0):
+            if(outencode==None or len(outencode)<0):
                 outencode='UTF-8'
             return RealTimeSubprocess(cmd,
                                   self._write_to_stdout,
                                   self._write_to_stderr,
                                   self._read_from_stdin,cwd,shell,env,self,outencode=outencode)
         except Exception as e:
-            self._write_to_stdout("RealTimeSubprocess err:"+str(e))
+            self._logln("RealTimeSubprocess err:"+str(e),3)
             raise
     def getossubsys(self):
         uname=''
